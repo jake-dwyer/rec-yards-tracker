@@ -160,7 +160,7 @@ const perGameNeeded = (
   target: number,
   remainingGames: number | null
 ) => {
-  if (!Number.isFinite(remainingGames)) return "-";
+  if (remainingGames === null || !Number.isFinite(remainingGames)) return "-";
   if (remainingGames <= 0) return "No games left";
   const delta = target - current;
   if (delta <= 0) return "Reached";

@@ -123,10 +123,13 @@ const getLiveGameYards = async (athleteIds: string[], teams: string[]) => {
       ? competition.competitors
       : [];
     const abbreviations = competitors
-      .map((competitor: { team?: { abbreviation?: string } }) => competitor?.team?.abbreviation)
-      .filter(Boolean);
+      .map(
+        (competitor: { team?: { abbreviation?: string } }) =>
+          competitor?.team?.abbreviation
+      )
+      .filter((abbr): abbr is string => Boolean(abbr));
 
-    if (abbreviations.some((abbr: string) => teamSet.has(abbr)) && event.id) {
+    if (abbreviations.some((abbr) => teamSet.has(abbr)) && event.id) {
       liveEventIds.add(event.id);
     }
   });
