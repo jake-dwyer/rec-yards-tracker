@@ -241,8 +241,8 @@ const PlayerCard = ({
 
       <div className="stat-pills">
         <span className="pill is-active">{player.team}</span>
-        <span className="pill">Season {player.season}</span>
-        <span className="pill">Week {seasonWeek ?? "-"}</span>
+        <span className="pill">SEASON {player.season}</span>
+        <span className="pill">WEEK {seasonWeek ?? "-"}</span>
         <span className="pill">{player.games} GP</span>
       </div>
 
@@ -284,9 +284,6 @@ const PlayerCard = ({
           </span>
         </div>
         <div className="stat">
-          <span className="block text-xs text-[color:var(--muted)]">
-            17-Game Pace
-          </span>
           <strong className="text-lg font-semibold">
             {formatNumber(Math.round(pace))}
           </strong>
@@ -793,7 +790,6 @@ export default function Home() {
               season would land on the single-season receiving leaderboard.
             </p>
             <div className="flex flex-wrap gap-3 text-xs font-semibold text-[color:var(--muted)]">
-              <span className="badge">17-game pace</span>
               <span className="badge">Live rankings</span>
               <span className="badge">Record chase</span>
             </div>
@@ -843,7 +839,7 @@ export default function Home() {
               onClick={fetchLiveStats}
               disabled={liveLoading}
             >
-              {liveLoading ? "Refreshing" : "Refresh now"}
+              {liveLoading ? "REFRESHING" : "REFRESH NOW"}
             </button>
           </div>
         </section>
