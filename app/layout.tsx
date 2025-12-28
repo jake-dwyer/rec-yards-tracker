@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RecYards Tracker",
+  title: "JSN and Puka Tracker",
   description: "Track Jaxon Smith-Njigba and Puka Nacua on the single-season record chase.",
 };
 
