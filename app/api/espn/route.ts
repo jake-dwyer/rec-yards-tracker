@@ -27,6 +27,7 @@ type PlayerStats = {
   receivingYards: number | null;
   gamesPlayed: number | null;
   liveGameYards?: number | null;
+  liveGameState?: "in" | "post" | null;
   error?: string;
 };
 
@@ -55,18 +56,25 @@ const getLeagueState = async () => {
   return { seasonYear, currentWeek };
 };
 
+type LiveGameInfo = {
+  yards: number;
+  state: "in" | "post";
+};
+
 const fetchPlayerStats = async (
   athleteId: string,
   seasonYear: number | null,
-  liveGameYards: Record<string, number>
+  liveGameInfo: Record<string, LiveGameInfo>
 ): Promise<PlayerStats> => {
+  const liveInfo = liveGameInfo[athleteId];
   if (!seasonYear) {
     return {
       id: athleteId,
       seasonYear: null,
       receivingYards: null,
       gamesPlayed: null,
-      liveGameYards: liveGameYards[athleteId] ?? null,
+      liveGameYards: liveInfo?.yards ?? null,
+      liveGameState: liveInfo?.state ?? null,
       error: "Missing season year",
     };
   }
@@ -80,7 +88,8 @@ const fetchPlayerStats = async (
       seasonYear,
       receivingYards: null,
       gamesPlayed: null,
-      liveGameYards: liveGameYards[athleteId] ?? null,
+      liveGameYards: liveInfo?.yards ?? null,
+      liveGameState: liveInfo?.state ?? null,
       error: `Stats fetch failed (${response.status})`,
     };
   }
@@ -95,30 +104,31 @@ const fetchPlayerStats = async (
     seasonYear: typeof data?.season?.year === "number" ? data.season.year : seasonYear,
     receivingYards: getStatValue(receiving, "receivingYards"),
     gamesPlayed: getStatValue(general, "gamesPlayed"),
-    liveGameYards: liveGameYards[athleteId] ?? null,
+    liveGameYards: liveInfo?.yards ?? null,
+    liveGameState: liveInfo?.state ?? null,
   };
 };
 
 const getLiveGameYards = async (athleteIds: string[], teams: string[]) => {
   if (!teams.length || !athleteIds.length) {
-    return {} as Record<string, number>;
+    return {} as Record<string, LiveGameInfo>;
   }
 
   const response = await fetch(SCOREBOARD_URL, { cache: "no-store" });
   if (!response.ok) {
-    return {} as Record<string, number>;
+    return {} as Record<string, LiveGameInfo>;
   }
 
   const data = await response.json();
   const events = Array.isArray(data?.events) ? data.events : [];
   const teamSet = new Set(teams);
   const athleteSet = new Set(athleteIds);
-  const liveEventIds = new Set<string>();
+  const liveEventStates = new Map<string, "in" | "post">();
 
   events.forEach((event: { id?: string; competitions?: Array<Record<string, any>>; status?: any }) => {
     const competition = event?.competitions?.[0];
     const state = event?.status?.type?.state;
-    if (!competition || state !== "in") return;
+    if (!competition || (state !== "in" && state !== "post")) return;
     const competitors = Array.isArray(competition?.competitors)
       ? competition.competitors
       : [];
@@ -130,17 +140,17 @@ const getLiveGameYards = async (athleteIds: string[], teams: string[]) => {
       .filter((abbr): abbr is string => Boolean(abbr));
 
     if (abbreviations.some((abbr) => teamSet.has(abbr)) && event.id) {
-      liveEventIds.add(event.id);
+      liveEventStates.set(event.id, state);
     }
   });
 
-  if (!liveEventIds.size) {
-    return {} as Record<string, number>;
+  if (!liveEventStates.size) {
+    return {} as Record<string, LiveGameInfo>;
   }
 
-  const liveYards: Record<string, number> = {};
+  const liveYards: Record<string, LiveGameInfo> = {};
   await Promise.all(
-    Array.from(liveEventIds).map(async (eventId) => {
+    Array.from(liveEventStates.entries()).map(async ([eventId, state]) => {
       try {
         const summaryUrl = `https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event=${eventId}`;
         const summaryResponse = await fetch(summaryUrl, { cache: "no-store" });
@@ -164,7 +174,10 @@ const getLiveGameYards = async (athleteIds: string[], teams: string[]) => {
               const stats = Array.isArray(athleteEntry.stats) ? athleteEntry.stats : [];
               const yardsValue = Number(stats[ydsIndex]);
               if (Number.isFinite(yardsValue)) {
-                liveYards[athleteId] = yardsValue;
+                liveYards[athleteId] = {
+                  yards: yardsValue,
+                  state,
+                };
               }
             });
           });
@@ -222,9 +235,9 @@ export async function GET(request: Request) {
     );
   }
 
-  const liveGameYards = await getLiveGameYards(ids, teams);
+  const liveGameInfo = await getLiveGameYards(ids, teams);
   const players = await Promise.all(
-    ids.map((athleteId) => fetchPlayerStats(athleteId, seasonYear, liveGameYards))
+    ids.map((athleteId) => fetchPlayerStats(athleteId, seasonYear, liveGameInfo))
   );
 
   return NextResponse.json({

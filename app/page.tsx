@@ -33,8 +33,11 @@ type Player = {
   accent: string;
   accentSecondary: string;
   yards: number;
+  seasonYards: number;
   games: number;
   liveGameYards?: number | null;
+  liveGameState?: "in" | "post" | null;
+  liveGameIncluded?: boolean;
 };
 
 const SEASON_GAMES = 17;
@@ -87,7 +90,10 @@ const initialPlayers: Player[] = [
     accent: "#046A38",
     accentSecondary: "#003087",
     yards: 0,
+    seasonYards: 0,
     games: 0,
+    liveGameState: null,
+    liveGameIncluded: false,
   },
   {
     id: "puka",
@@ -98,7 +104,10 @@ const initialPlayers: Player[] = [
     accent: "#FFD100",
     accentSecondary: "#003594",
     yards: 0,
+    seasonYards: 0,
     games: 0,
+    liveGameState: null,
+    liveGameIncluded: false,
   },
 ];
 
@@ -113,6 +122,7 @@ type LivePlayerStats = {
   receivingYards: number | null;
   gamesPlayed: number | null;
   liveGameYards?: number | null;
+  liveGameState?: "in" | "post" | null;
   error?: string;
 };
 
@@ -182,7 +192,7 @@ const PlayerCard = ({
 }) => {
   const yards = player.yards;
   const games = player.games;
-  const liveGameActive = (player.liveGameYards ?? 0) > 0;
+  const liveGameActive = Boolean(player.liveGameIncluded);
   const averageGames = games + (liveGameActive ? 1 : 0);
   const perGame = averageGames > 0 ? yards / averageGames : 0;
   const pace = perGame * SEASON_GAMES;
@@ -308,18 +318,6 @@ const PlayerCard = ({
       <div className="grid gap-2 text-sm text-[color:var(--muted)]">
         <div className="border border-[color:var(--divider)] border-l-4 border-l-[color:var(--sunset)] bg-[color:var(--card-strong)] p-3 font-semibold text-[color:var(--foreground)]">
           Record chase: {yardsToTarget(yards, record.yards)}
-        </div>
-        <div>
-          <strong className="text-[color:var(--foreground)]">
-            2,000 club:
-          </strong>{" "}
-          {yardsToTarget(yards, 2000)}
-        </div>
-        <div>
-          <strong className="text-[color:var(--foreground)]">
-            1,800 mark:
-          </strong>{" "}
-          {yardsToTarget(yards, 1800)}
         </div>
         <div className="pt-2 text-xs font-semibold text-[color:var(--muted)]">
           Needed per game (remaining)
@@ -595,6 +593,7 @@ export default function Home() {
   const [liveUpdatedAt, setLiveUpdatedAt] = useState<string | null>(null);
   const [liveSeason, setLiveSeason] = useState<number | null>(null);
   const [liveWeek, setLiveWeek] = useState<number | null>(null);
+  const lastSeasonYardsRef = useRef<Record<string, number>>({});
   const leaderboard = useMemo(() => {
     const liveByName = new Map(players.map((player) => [player.name, player]));
     return leaderboardData
@@ -631,8 +630,7 @@ export default function Home() {
           } as LiveLeaderboardEntry;
         }
 
-        const liveGameYards = livePlayer.liveGameYards ?? 0;
-        const baseYards = Math.max(livePlayer.yards - liveGameYards, 0);
+        const baseYards = livePlayer.seasonYards ?? livePlayer.yards;
         return {
           ...entry,
           year: livePlayer.season,
@@ -689,30 +687,51 @@ export default function Home() {
           const live = liveById.get(player.espnId);
           if (!live || live.error) return player;
 
-          const baseYards =
-            typeof live.receivingYards === "number"
-              ? Math.round(live.receivingYards)
-              : player.yards;
-          const liveGameYards =
-            typeof live.liveGameYards === "number" ? live.liveGameYards : 0;
-          const totalYards =
-            liveGameYards > 0 ? baseYards + liveGameYards : baseYards;
+        const fallbackBase =
+          typeof player.seasonYards === "number"
+            ? player.seasonYards
+            : typeof player.yards === "number"
+            ? Math.max(
+                player.yards -
+                  (player.liveGameIncluded ? player.liveGameYards ?? 0 : 0),
+                0
+              )
+            : 0;
+        const baseYards =
+          typeof live.receivingYards === "number"
+            ? Math.round(live.receivingYards)
+            : fallbackBase;
+        const liveGameYards =
+          typeof live.liveGameYards === "number" ? live.liveGameYards : 0;
+        const liveGameState = live.liveGameState ?? null;
+        const prevBase = lastSeasonYardsRef.current[player.id];
+        const seasonUpdated =
+          typeof prevBase === "number" ? baseYards > prevBase : false;
+        const includeLive =
+          liveGameYards > 0 &&
+          (liveGameState === "in" ||
+            (liveGameState === "post" && !seasonUpdated));
+        lastSeasonYardsRef.current[player.id] = baseYards;
+        const totalYards = includeLive ? baseYards + liveGameYards : baseYards;
 
-          return {
-            ...player,
-            season:
-              typeof live.seasonYear === "number"
-                ? live.seasonYear
-                : player.season,
-            yards: totalYards,
-            games:
-              typeof live.gamesPlayed === "number"
-                ? Math.round(live.gamesPlayed)
-                : player.games,
-            liveGameYards: liveGameYards > 0 ? liveGameYards : null,
-          };
-        })
-      );
+        return {
+          ...player,
+          season:
+            typeof live.seasonYear === "number"
+              ? live.seasonYear
+              : player.season,
+          yards: totalYards,
+          seasonYards: baseYards,
+          games:
+            typeof live.gamesPlayed === "number"
+              ? Math.round(live.gamesPlayed)
+              : player.games,
+          liveGameYards: liveGameYards > 0 ? liveGameYards : null,
+          liveGameState,
+          liveGameIncluded: includeLive,
+        };
+      })
+    );
 
       const errors = data.players
         .filter((player) => player.error)
