@@ -864,11 +864,6 @@ export default function Home() {
         <section className="grid gap-5">
           <Leaderboard leaderboard={leaderboard} baselineRanks={baselineRanks} />
         </section>
-
-        <p className="text-xs text-[color:var(--muted)]">
-          Tip: update the <code>leaderboardData</code> list in
-          <code>app/page.tsx</code> to extend the leaderboard.
-        </p>
       </main>
     </div>
   );
